@@ -225,7 +225,7 @@
         <button id="btnDisconnect" class="secondary" type="button" disabled>Disconnect</button>
         <span id="connStatus" class="status">Not connected</span>
       </div>
-      <p class="note">Baud: <code>460800</code> · chip: <code>esp32c5</code> · reset: default, then hard</p>
+      <p class="note">Baud: <code>460800</code> · chip: <code>esp32c5</code> · sends <code>download</code> then sync · reset: default, then hard</p>
     </section>
 
     <section class="card">
@@ -422,10 +422,36 @@
 
     btnClearLog.addEventListener("click", () => { logEl.textContent = ""; });
 
+    const APP_BAUD = 115200;
+    const DOWNLOAD_CMD = "download\n";
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function sendDownloadCommand(port) {
+      log(`Opening serial at ${APP_BAUD} to request download mode…`);
+      await port.open({ baudRate: APP_BAUD });
+      try {
+        const writer = port.writable.getWriter();
+        try {
+          const payload = new TextEncoder().encode(DOWNLOAD_CMD);
+          log('Sending serial command: download');
+          await writer.write(payload);
+        } finally {
+          writer.releaseLock();
+        }
+        // Give firmware time to reboot into download mode.
+        await sleep(1000);
+      } finally {
+        try {
+          await port.close();
+        } catch (_) {}
+      }
+    }
+
     btnConnect.addEventListener("click", async () => {
       try {
         setBusy(true);
         device = await navigator.serial.requestPort({});
+        await sendDownloadCommand(device);
         transport = new Transport(device, false);
         esploader = new ESPLoader({
           transport,
@@ -442,6 +468,7 @@
         connStatus.textContent = "Connection error";
         connStatus.className = "status err";
         try { if (transport) await transport.disconnect(); } catch (_) {}
+        try { if (device && device.readable) await device.close(); } catch (_) {}
         device = null;
         transport = null;
         esploader = null;
