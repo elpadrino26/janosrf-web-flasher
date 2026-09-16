@@ -1,182 +1,545 @@
-  <!DOCTYPE html>
-  <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>JanOS SubGHz — community RF stack for C5Monster</title>
-      <link href="style.css" rel="stylesheet" type="text/css" media="all">
-    </head>
-    <body>
-      <div class="wrap">
-        <h1>JanOS SubGHz - Community Fork of ProjectZero</h1>
-        <p class="tagline">
-          Sub-GHz done right for people who actually use the hardware — rolling gates, remotes, and a serious decoder lineup behind one UART-friendly stack.
-        </p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JanosRF — ESP32-C5 Web Flasher</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3d9cf0;
+      --accent-dim: #2563a8;
+      --ok: #3ecf8e;
+      --warn: #f0b429;
+      --err: #f07178;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 600px at 10% -10%, #1a3050 0%, transparent 55%),
+                  radial-gradient(900px 500px at 100% 0%, #1a3a32 0%, transparent 50%),
+                  var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem 1.25rem 3rem;
+    }
+    h1 {
+      font-size: 1.55rem;
+      font-weight: 650;
+      margin: 0 0 0.25rem;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      color: var(--muted);
+      margin: 0 0 1.5rem;
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.2rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 0 0 0.85rem;
+      font-weight: 600;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+    }
+    .status {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    button {
+      font: inherit;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+    }
+    button:hover:not(:disabled) { background: var(--accent-dim); }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.secondary:hover:not(:disabled) {
+      border-color: var(--muted);
+      background: rgba(255,255,255,0.04);
+    }
+    button.danger {
+      background: transparent;
+      color: var(--err);
+      border: 1px solid var(--err);
+    }
+    .map {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .map th, .map td {
+      text-align: left;
+      padding: 0.55rem 0.4rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .map th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .map tr:last-child td { border-bottom: none; }
+    code, .mono {
+      font-family: var(--mono);
+      font-size: 0.85em;
+    }
+    .file-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .file-label input { max-width: 11rem; }
+    .chip {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: rgba(61,156,240,0.15);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .chip.local {
+      background: rgba(240,180,41,0.15);
+      color: var(--warn);
+    }
+    .progress-wrap {
+      margin-top: 0.85rem;
+      display: none;
+    }
+    .progress-wrap.visible { display: block; }
+    .progress-bar {
+      height: 8px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--ok));
+      transition: width 0.15s ease;
+    }
+    .progress-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.35rem;
+    }
+    #log {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      background: #0a0e14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #b8c5d6;
+    }
+    .params {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.5rem 1rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .params strong { color: var(--text); font-weight: 600; }
+    .note {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+    .banner {
+      display: none;
+      background: rgba(240,113,120,0.12);
+      border: 1px solid var(--err);
+      color: #ffb4b8;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .banner.visible { display: block; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>JanosRF Web Flasher</h1>
+    <p class="sub">Flash ESP32-C5 from the browser · firmware from <code>latest (16.09.2026)/</code></p>
 
-        <div class="hero">
-          <p><strong>Hardware lock-in (by design).</strong> This stack is built and tested for the <strong>original Lab5 C5Monster</strong> board only — the one with the CC1101 wired the way Lab5 intended. Clones and random breakouts are on their own.</p>
-          <p>Grab the <code>janos_subghz_lib</code> ESP-IDF components, wire JanOS, and you get RX/TX workflows, a manufacturer key table, and a console you can drive from a terminal or your favourite LVGL rig.</p>
+    <div id="noserial" class="banner">
+      This browser does not support Web Serial. Use Chrome or Edge over HTTPS.
+    </div>
 
-          Flashing the firmware (replace XYZ with your port name):
-          <pre>esptool --chip esp32c5 \
-  -p /dev/tty.usbserial-XYZ \
-  -b 460800 \
-  --before=default-reset \
-  --after=hard-reset \
-  write-flash \
-  --flash-mode dio \
-  --flash-freq 80m \
-  --flash-size 8MB \
-  0x2000 bootloader.bin \
-  0x10000 partition-table.bin \
-  0x20000 projectZero.bin</pre>
-
-        
-          <hr>
-          Download the firmware (Mega.nz). <br>
-          Software list - latest on top: <br>
-
-
-          <br>
-          <a href="https://mega.nz/file/xjwS2Y5K#i2XACIrGwEcMjUQWMIFsdYkhDaI3f5UxTQ7bsJx1bX4">16.09.2026.01 - Upstream merge (CSA & other improvements)</a>            
-          
-          
-          <br>
-          <a href="https://mega.nz/file/QrRSEJgZ#Nk6KjqaPii22oXbtMXBXEs6NQ1hOqGEMNjFFn-yIRYk">12.09.2026.01 - Holtek VS CAME fix</a>  
-      
-          <br>
-          <a href="https://mega.nz/file/FrJmQYgC#Whlie3abbWus65P-zyWty1aZIRY9XSteksvGTD22cLU">06.09.2026.01 - Upstream rebase from Lab5 (Wardrive heartbeat, Rogue GITM)</a>       
-          <br>
-          <a href="https://mega.nz/file/N2wF1KxD#xrBFkF08jF1SM8IPJ_iqkEihDyJ-D9m1bFNFG-uJNtM">07.08.2026.01 - Upstream rebase from Lab5 (SD admin portal)</a>    
-          
-          <br>
-          <a href="https://mega.nz/file/tyB2CSDQ#p9KtqsV7za1SAksBruLqDq99Fr1wuLLglIHWSPOlyLU">28.07.2026.01 - NFC support. Upstream rebase from Lab5 (wardrives)</a>        
-          
-          <br>
-          <a href="https://mega.nz/file/Q34gUCqD#H8FDQ_LhflqcMQyHMF6FtrHClyQo0VZR9QQBjaLISY8">17.07.2026.01 - Upstream rebase from Lab5 (OWE wifi connection)</a>        
-          <br>
-          <a href="https://mega.nz/file/dj5lTTqL#9XpymNXCchjS9QFxJbkulY3Gqm3YSJ73dnVFqjeAXhs">07.07.2026.01 - Upstream rebase from Lab5 (single handshake bugfix), subghz pointer fix</a>
-          <br>
-          <a href="https://mega.nz/file/cyIBWKhA#Apwz8uYRCKHSjlhz251VUqaYjaxBT8Mx2ylXnDpkt9c">27.06.2026.01 - Upstream rebase from Lab5 (Zigbee, Wardrive2.0)</a>
-          <br>          
-          <a href="https://mega.nz/file/AmhBSBIL#3nJeV2BgNp-gX8eDBChKoV9gBgo0ZKSDtYq0ViIhqiA">08.06.2026.01 - Somfy decoder, Keytis encoders</a>        
-          <br>
-          <a href="https://mega.nz/file/dnowXCBK#SqvrpJ6FHMymthms0XzYMZ6EBNw7fj45E4tKJMyO0iY">04.06.2026.01 - Holtek fix again.</a>        
-          <br>
-          <a href="https://mega.nz/file/o6QgkKTB#J2qtmlbNHekfyX00W6i5eadr-qIn5JaVHRO28zXRtwY">03.06.2026.01 - Upstream rebase from Lab5 (NRF24 BLE Jammer).</a>
-          <br>
-          <a href="https://mega.nz/file/Qvglia7A#tHmfa82K46uc93o9zaraMbNlNSS5HqUvjBYORnqto7U">29.05.2026.01 - Upstream rebase from Lab5 (MFP, Uptime).</a>
-          <br>
-          <a href="https://mega.nz/file/5nw21DRI#C0a4R-wl5PL5iriBY-Ohm0a6HvUNIzE_NPkbvR0CxYw">26.05.2026.02 - Further Noise removal. Holtek Fix.</a>
-          <br>
-          <a href="https://mega.nz/file/Ym4GRBKA#1B0smAsLa01t3CqGB6kYB6iWOlFLpbdNCJ6WimZWljM">26.05.2026.01 - Noise removal. Various bugfixes.</a>
-          <br>
-          <a href="https://mega.nz/file/4ipHlKzA#21-YAG4xjzpm55MPYR6XZkWAzA7GpwnYXBAMDZEelYI">24.05.2026.02 - Transmission fix</a>
-          <br>
-          <a href="https://mega.nz/file/pjxgya7I#t4R8Z8eSdP36_PJJiXmC-KyLn7nNIPsjEAnyT1E4CCU">24.05.2026.01 - Critical keeloq SD bug</a>
-          <br>
-          
-        </div>
-
-        <p class="lead">
-          Below is what the firmware actually advertises today: <strong>72 protocol families</strong> in the on-device registry, plus <strong>105 named manufacturer / MF key slots</strong> in the embedded keystore (plus extra raw crypto blobs for a few rolling schemes). If it is not on these lists, do not expect magic.
-        </p>
-
-        <h2>Protocol families</h2>
-        <p class="sub">
-          <strong>72</strong> entries — static OOK/Manchester, dynamic rolling-code engines, and RAW capture paths.
-          <span class="tag tag-static">Static</span>
-          <span class="tag tag-dynamic">Dynamic</span>
-          <span class="tag tag-raw">RAW</span>
-          Only <strong>BinRAW</strong> is flagged as not implemented on-device right now.
-        </p>
-        <div class="panel">
-          <ul class="two-col">
-            <li>GateTX <span class="tag tag-static">Static</span></li>
-            <li>KeeLoq <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Star Line <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Nice FLO <span class="tag tag-static">Static</span></li>
-            <li>CAME <span class="tag tag-static">Static</span></li>
-            <li>Faac SLH <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Nice FloR-S <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>CAME TWEE <span class="tag tag-static">Static</span></li>
-            <li>CAME Atomo <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Nero Sketch <span class="tag tag-static">Static</span></li>
-            <li>iDo 117/111 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>KIA Seed <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Hormann HSM <span class="tag tag-static">Static</span></li>
-            <li>Nero Radio <span class="tag tag-static">Static</span></li>
-            <li>Somfy Telis <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Somfy Keytis <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Scher-Khan <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Princeton <span class="tag tag-static">Static</span></li>
-            <li>RAW <span class="tag tag-raw">RAW</span></li>
-            <li>Linear <span class="tag tag-static">Static</span></li>
-            <li>Security+ 2.0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Security+ 1.0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>MegaCode <span class="tag tag-static">Static</span></li>
-            <li>Holtek <span class="tag tag-static">Static</span></li>
-            <li>Cham_Code <span class="tag tag-static">Static</span></li>
-            <li>Power Smart <span class="tag tag-static">Static</span></li>
-            <li>Marantec <span class="tag tag-static">Static</span></li>
-            <li>BETT <span class="tag tag-static">Static</span></li>
-            <li>Doitrand <span class="tag tag-static">Static</span></li>
-            <li>Phoenix_V2 <span class="tag tag-static">Static</span></li>
-            <li>Honeywell Sec <span class="tag tag-static">Static</span></li>
-            <li>Honeywell <span class="tag tag-static">Static</span></li>
-            <li>Magellan <span class="tag tag-static">Static</span></li>
-            <li>Intertechno_V3 <span class="tag tag-static">Static</span></li>
-            <li>Clemsa <span class="tag tag-static">Static</span></li>
-            <li>Ansonic <span class="tag tag-static">Static</span></li>
-            <li>SMC5326 <span class="tag tag-static">Static</span></li>
-            <li>Holtek_HT12X <span class="tag tag-static">Static</span></li>
-            <li>LinearDelta3 <span class="tag tag-static">Static</span></li>
-            <li>Dooya <span class="tag tag-static">Static</span></li>
-            <li>Alutech AT-4N <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>KingGates Stylo4k <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>BinRAW <span class="tag tag-no">not on device</span></li>
-            <li>Mastercode <span class="tag tag-static">Static</span></li>
-            <li>X10 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Hormann BiSecur <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Legrand <span class="tag tag-static">Static</span></li>
-            <li>Dickert_MAHS <span class="tag tag-static">Static</span></li>
-            <li>GangQi <span class="tag tag-static">Static</span></li>
-            <li>Marantec24 <span class="tag tag-static">Static</span></li>
-            <li>Hollarm <span class="tag tag-static">Static</span></li>
-            <li>Hay21 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Revers_RB2 <span class="tag tag-static">Static</span></li>
-            <li>Feron <span class="tag tag-static">Static</span></li>
-            <li>Jarolift <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Fiat V0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Fiat V1 <span class="tag tag-dynamic">Dynamic</span> <small>(RX-only)</small></li>
-            <li>Ford V0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Honda Static <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V1 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V2 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V3/V4 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V5 <span class="tag tag-dynamic">Dynamic</span> <small>(RX-only)</small></li>
-            <li>Kia V6 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Kia V7 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Mazda V0 <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Mitsubishi V0 <span class="tag tag-dynamic">Dynamic</span> <small>(RX-only)</small></li>
-            <li>Porsche Touareg <span class="tag tag-dynamic">Dynamic</span> <small>(RX-only)</small></li>
-            <li>PSA <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>Subaru <span class="tag tag-dynamic">Dynamic</span></li>
-            <li>VAG <span class="tag tag-dynamic">Dynamic</span></li>
-          </ul>
-        </div>
-        <p class="sub">Tip: on a live board, <code>subghz_protocols</code> dumps the same names with an optional text filter.</p>
-
-    
-
-        <div class="disclaimer">
-          <strong>Power note.</strong> Sub-GHz gear can open doors — literally. Use it where you are allowed to, respect contracts and local law, and do not be the reason someone loses sleep over their driveway.
-        </div>
-
-        <footer>
-          Unofficial community page — not a Lab5 warranty statement. YMMV; real coverage always wins over marketing copy.
-        </footer>
+    <section class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <button id="btnConnect" type="button">Connect</button>
+        <button id="btnDisconnect" class="secondary" type="button" disabled>Disconnect</button>
+        <span id="connStatus" class="status">Not connected</span>
       </div>
-    </body>
-  </html>
+      <p class="note">Baud: <code>460800</code> · chip: <code>esp32c5</code> · sends <code>download</code> then sync · reset: default, then hard</p>
+    </section>
+
+    <section class="card">
+      <h2>Firmware</h2>
+      <table class="map">
+        <thead>
+          <tr>
+            <th>Offset</th>
+            <th>File</th>
+            <th>Source</th>
+            <th>Override</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr data-key="bootloader">
+            <td class="mono">0x2000</td>
+            <td class="mono">bootloader.bin</td>
+            <td><span class="chip" data-source>latest/</span></td>
+            <td>
+              <label class="file-label">
+                <input type="file" accept=".bin,application/octet-stream" data-file="bootloader" />
+              </label>
+            </td>
+          </tr>
+          <tr data-key="partition">
+            <td class="mono">0x10000</td>
+            <td class="mono">partition-table.bin</td>
+            <td><span class="chip" data-source>latest/</span></td>
+            <td>
+              <label class="file-label">
+                <input type="file" accept=".bin,application/octet-stream" data-file="partition" />
+              </label>
+            </td>
+          </tr>
+          <tr data-key="app">
+            <td class="mono">0x20000</td>
+            <td class="mono">projectZero.bin</td>
+            <td><span class="chip" data-source>latest/</span></td>
+            <td>
+              <label class="file-label">
+                <input type="file" accept=".bin,application/octet-stream" data-file="app" />
+              </label>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="row" style="margin-top: 0.9rem;">
+        <button id="btnFlash" type="button" disabled>Flash</button>
+        <button id="btnClearLocal" class="secondary" type="button">Clear local overrides</button>
+      </div>
+      <div id="progressWrap" class="progress-wrap">
+        <div class="progress-bar"><span id="progressBar"></span></div>
+        <div id="progressLabel" class="progress-label">0%</div>
+      </div>
+      <div class="params" style="margin-top: 1rem;">
+        <div>Mode: <strong>dio</strong></div>
+        <div>Freq: <strong>80m</strong></div>
+        <div>Size: <strong>8MB</strong></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Log</h2>
+      <div id="log"></div>
+      <div class="row" style="margin-top: 0.6rem;">
+        <button id="btnClearLog" class="secondary" type="button">Clear log</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.6.1/bundle.js";
+
+    const BAUD = 460800;
+    const FLASH_MODE = "dio";
+    const FLASH_FREQ = "80m";
+    const FLASH_SIZE = "8MB";
+
+    const PARTS = [
+      { key: "bootloader", address: 0x2000, url: "./latest/bootloader.bin", name: "bootloader.bin" },
+      { key: "partition", address: 0x10000, url: "./latest/partition-table.bin", name: "partition-table.bin" },
+      { key: "app", address: 0x20000, url: "./latest/projectZero.bin", name: "projectZero.bin" },
+    ];
+
+    const logEl = document.getElementById("log");
+    const connStatus = document.getElementById("connStatus");
+    const btnConnect = document.getElementById("btnConnect");
+    const btnDisconnect = document.getElementById("btnDisconnect");
+    const btnFlash = document.getElementById("btnFlash");
+    const btnClearLocal = document.getElementById("btnClearLocal");
+    const btnClearLog = document.getElementById("btnClearLog");
+    const progressWrap = document.getElementById("progressWrap");
+    const progressBar = document.getElementById("progressBar");
+    const progressLabel = document.getElementById("progressLabel");
+    const noserial = document.getElementById("noserial");
+
+    const localFiles = { bootloader: null, partition: null, app: null };
+
+    let device = null;
+    let transport = null;
+    let esploader = null;
+    let connected = false;
+    let busy = false;
+
+    function log(line) {
+      const ts = new Date().toLocaleTimeString("en-GB", { hour12: false });
+      logEl.textContent += `[${ts}] ${line}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    const terminal = {
+      clean() { logEl.textContent = ""; },
+      writeLine(data) { log(String(data)); },
+      write(data) {
+        logEl.textContent += String(data);
+        logEl.scrollTop = logEl.scrollHeight;
+      },
+    };
+
+    function setConnected(ok, chipName) {
+      connected = ok;
+      btnConnect.disabled = ok || busy;
+      btnDisconnect.disabled = !ok || busy;
+      btnFlash.disabled = !ok || busy;
+      if (ok) {
+        connStatus.textContent = chipName ? `Connected: ${chipName}` : "Connected";
+        connStatus.className = "status ok";
+      } else {
+        connStatus.textContent = "Not connected";
+        connStatus.className = "status";
+      }
+    }
+
+    function setBusy(v) {
+      busy = v;
+      btnConnect.disabled = connected || v;
+      btnDisconnect.disabled = !connected || v;
+      btnFlash.disabled = !connected || v;
+    }
+
+    function updateSourceChips() {
+      for (const part of PARTS) {
+        const row = document.querySelector(`tr[data-key="${part.key}"]`);
+        const chip = row.querySelector("[data-source]");
+        if (localFiles[part.key]) {
+          chip.textContent = localFiles[part.key].name;
+          chip.className = "chip local";
+        } else {
+          chip.textContent = "latest/";
+          chip.className = "chip";
+        }
+      }
+    }
+
+    async function loadPart(part) {
+      if (localFiles[part.key]) {
+        log(`Using local file: ${localFiles[part.key].name} @ 0x${part.address.toString(16)}`);
+        return new Uint8Array(await localFiles[part.key].arrayBuffer());
+      }
+      log(`Fetching ${part.url}…`);
+      const res = await fetch(part.url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to fetch ${part.url} (${res.status})`);
+      const buf = new Uint8Array(await res.arrayBuffer());
+      log(`  ${part.name}: ${buf.length} B`);
+      return buf;
+    }
+
+    function setProgress(pct, label) {
+      progressWrap.classList.add("visible");
+      progressBar.style.width = `${pct}%`;
+      progressLabel.textContent = label || `${pct.toFixed(0)}%`;
+    }
+
+    if (!("serial" in navigator)) {
+      noserial.classList.add("visible");
+      btnConnect.disabled = true;
+      log("Web Serial API is not available.");
+    }
+
+    document.querySelectorAll("input[data-file]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.file;
+        localFiles[key] = input.files && input.files[0] ? input.files[0] : null;
+        updateSourceChips();
+      });
+    });
+
+    btnClearLocal.addEventListener("click", () => {
+      for (const k of Object.keys(localFiles)) localFiles[k] = null;
+      document.querySelectorAll("input[data-file]").forEach((i) => { i.value = ""; });
+      updateSourceChips();
+      log("Cleared local overrides — using latest/ again.");
+    });
+
+    btnClearLog.addEventListener("click", () => { logEl.textContent = ""; });
+
+    const APP_BAUD = 115200;
+    const DOWNLOAD_CMD = "download\n";
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function sendDownloadCommand(port) {
+      log(`Opening serial at ${APP_BAUD} to request download mode…`);
+      await port.open({ baudRate: APP_BAUD });
+      try {
+        const writer = port.writable.getWriter();
+        try {
+          const payload = new TextEncoder().encode(DOWNLOAD_CMD);
+          log('Sending serial command: download');
+          await writer.write(payload);
+        } finally {
+          writer.releaseLock();
+        }
+        // Give firmware time to reboot into download mode.
+        await sleep(1000);
+      } finally {
+        try {
+          await port.close();
+        } catch (_) {}
+      }
+    }
+
+    btnConnect.addEventListener("click", async () => {
+      try {
+        setBusy(true);
+        device = await navigator.serial.requestPort({});
+        await sendDownloadCommand(device);
+        transport = new Transport(device, false);
+        esploader = new ESPLoader({
+          transport,
+          baudrate: BAUD,
+          terminal,
+          debugLogging: false,
+        });
+        log("Connecting / syncing…");
+        const chip = await esploader.main("default_reset");
+        setConnected(true, chip);
+        log(`Ready. Chip: ${chip}`);
+      } catch (e) {
+        log(`Connection error: ${e.message || e}`);
+        connStatus.textContent = "Connection error";
+        connStatus.className = "status err";
+        try { if (transport) await transport.disconnect(); } catch (_) {}
+        try { if (device && device.readable) await device.close(); } catch (_) {}
+        device = null;
+        transport = null;
+        esploader = null;
+        setConnected(false);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    btnDisconnect.addEventListener("click", async () => {
+      try {
+        setBusy(true);
+        if (transport) await transport.disconnect();
+      } catch (e) {
+        log(`Disconnect: ${e.message || e}`);
+      } finally {
+        device = null;
+        transport = null;
+        esploader = null;
+        setConnected(false);
+        setBusy(false);
+        log("Disconnected.");
+      }
+    });
+
+    btnFlash.addEventListener("click", async () => {
+      if (!esploader || !connected) return;
+      try {
+        setBusy(true);
+        setProgress(0, "Loading binaries…");
+
+        const fileArray = [];
+        for (let i = 0; i < PARTS.length; i++) {
+          const part = PARTS[i];
+          const data = await loadPart(part);
+          fileArray.push({ data, address: part.address });
+          setProgress(((i + 1) / PARTS.length) * 15, `Loaded ${part.name}`);
+        }
+
+        log("Starting writeFlash…");
+        await esploader.writeFlash({
+          fileArray,
+          flashMode: FLASH_MODE,
+          flashFreq: FLASH_FREQ,
+          flashSize: FLASH_SIZE,
+          eraseAll: false,
+          compress: true,
+          reportProgress: (fileIndex, written, total) => {
+            const base = 15;
+            const span = 80;
+            const fileSpan = span / PARTS.length;
+            const pct = base + fileIndex * fileSpan + (written / total) * fileSpan;
+            const name = PARTS[fileIndex]?.name || `file ${fileIndex}`;
+            setProgress(pct, `${name}: ${((written / total) * 100).toFixed(0)}%`);
+          },
+        });
+
+        setProgress(95, "Hard reset…");
+        await esploader.after("hard_reset");
+        setProgress(100, "Done");
+        log("Flash completed successfully.");
+      } catch (e) {
+        log(`Flash error: ${e.message || e}`);
+        console.error(e);
+        setProgress(0, "Error");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    log("JanosRF flasher ready. Connect your device and press Connect.");
+  </script>
+</body>
+</html>
