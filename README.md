@@ -18,11 +18,14 @@ Wymaga **Chrome** lub **Edge** (Web Serial API).
 
 ## Mapa flasha
 
-| Offset   | Plik                   | Źródło domyślne              |
-|----------|------------------------|------------------------------|
-| `0x2000` | `bootloader.bin`       | `latest/bootloader.bin`      |
-| `0x10000`| `partition-table.bin`  | `latest/partition-table.bin` |
-| `0x20000`| `projectZero.bin`      | `latest/projectZero.bin`     |
+| Offset     | Plik                   | Źródło domyślne              |
+|------------|------------------------|------------------------------|
+| `0x2000`   | `bootloader.bin`       | `latest/bootloader.bin`      |
+| `0x10000`  | `partition-table.bin`  | `latest/partition-table.bin` |
+| `0x20000`  | `projectZero.bin`      | `latest/projectZero.bin` (`ota_0`) |
+| `0x410000` | `projectZero.bin`      | ten sam plik (`ota_1`)       |
+
+Ten sam obraz aplikacji jest zapisywany w obu slotach OTA, żeby po flashu zawsze wstawał nowy firmware niezależnie od `otadata`.
 
 Parametry (jak w CLI):
 
@@ -37,7 +40,8 @@ esptool --chip esp32c5 \
   --flash-size 8MB \
   0x2000 bootloader.bin \
   0x10000 partition-table.bin \
-  0x20000 projectZero.bin
+  0x20000 projectZero.bin \
+  0x410000 projectZero.bin
 ```
 
 ## Aktualizacja firmware

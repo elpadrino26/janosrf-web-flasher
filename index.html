@@ -212,7 +212,7 @@
 <body>
   <main>
     <h1>JanosRF Web Flasher</h1>
-    <p class="sub">Flash ESP32-C5 from the browser · firmware from <code>latest (26.09.2026.1)/</code></p>
+    <p class="sub">Flash ESP32-C5 from the browser · firmware from <code>latest (29.09.2026.1)/</code></p>
 
     <div id="noserial" class="banner">
       This browser does not support Web Serial. Use Chrome or Edge over HTTPS.
@@ -261,7 +261,7 @@
             </td>
           </tr>
           <tr data-key="app">
-            <td class="mono">0x20000</td>
+            <td class="mono">0x20000<br>0x410000</td>
             <td class="mono">projectZero.bin</td>
             <td><span class="chip" data-source>latest/</span></td>
             <td>
@@ -305,9 +305,9 @@
     const FLASH_SIZE = "8MB";
 
     const PARTS = [
-      { key: "bootloader", address: 0x2000, url: "./latest/bootloader.bin", name: "bootloader.bin" },
-      { key: "partition", address: 0x10000, url: "./latest/partition-table.bin", name: "partition-table.bin" },
-      { key: "app", address: 0x20000, url: "./latest/projectZero.bin", name: "projectZero.bin" },
+      { key: "bootloader", addresses: [0x2000], url: "./latest/bootloader.bin", name: "bootloader.bin" },
+      { key: "partition", addresses: [0x10000], url: "./latest/partition-table.bin", name: "partition-table.bin" },
+      { key: "app", addresses: [0x20000, 0x410000], url: "./latest/projectZero.bin", name: "projectZero.bin" },
     ];
 
     const logEl = document.getElementById("log");
@@ -380,16 +380,21 @@
       }
     }
 
+    function fmtAddr(addr) {
+      return `0x${addr.toString(16)}`;
+    }
+
     async function loadPart(part) {
+      const addrs = part.addresses.map(fmtAddr).join(", ");
       if (localFiles[part.key]) {
-        log(`Using local file: ${localFiles[part.key].name} @ 0x${part.address.toString(16)}`);
+        log(`Using local file: ${localFiles[part.key].name} @ ${addrs}`);
         return new Uint8Array(await localFiles[part.key].arrayBuffer());
       }
       log(`Fetching ${part.url}…`);
       const res = await fetch(part.url, { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to fetch ${part.url} (${res.status})`);
       const buf = new Uint8Array(await res.arrayBuffer());
-      log(`  ${part.name}: ${buf.length} B`);
+      log(`  ${part.name}: ${buf.length} B @ ${addrs}`);
       return buf;
     }
 
@@ -501,10 +506,15 @@
         setProgress(0, "Loading binaries…");
 
         const fileArray = [];
+        const regionNames = [];
         for (let i = 0; i < PARTS.length; i++) {
           const part = PARTS[i];
           const data = await loadPart(part);
-          fileArray.push({ data, address: part.address });
+          for (const address of part.addresses) {
+            fileArray.push({ data: new Uint8Array(data), address });
+            regionNames.push(`${part.name} @ ${fmtAddr(address)}`);
+            log(`  queued ${part.name} @ ${fmtAddr(address)}`);
+          }
           setProgress(((i + 1) / PARTS.length) * 15, `Loaded ${part.name}`);
         }
 
@@ -519,9 +529,9 @@
           reportProgress: (fileIndex, written, total) => {
             const base = 15;
             const span = 80;
-            const fileSpan = span / PARTS.length;
+            const fileSpan = span / fileArray.length;
             const pct = base + fileIndex * fileSpan + (written / total) * fileSpan;
-            const name = PARTS[fileIndex]?.name || `file ${fileIndex}`;
+            const name = regionNames[fileIndex] || `file ${fileIndex}`;
             setProgress(pct, `${name}: ${((written / total) * 100).toFixed(0)}%`);
           },
         });
