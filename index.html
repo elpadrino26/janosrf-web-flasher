@@ -431,6 +431,52 @@
     const DOWNLOAD_CMD = "download\n";
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+    // Newer ESP32-C5 silicon reports a chip magic that esptool-js 0.6.1 does
+    // not know yet. The ROM class, stub and eFuse map are identical, so alias
+    // the new magic to the original one before the loader autodetects the chip.
+    const CHIP_MAGIC_ALIASES = new Map([
+      [0x30e1706f, 0x1101406f], // ESP32-C5 rev 1.2
+    ]);
+    const CHIP_DETECT_MAGIC_REG_ADDR = 0x40001000;
+
+    const patchChipMagic = (loader, { quiet = false } = {}) => {
+      const readReg = loader.readReg.bind(loader);
+      loader.readReg = async (addr, timeout) => {
+        const value = await readReg(addr, timeout);
+        if (addr !== loader.CHIP_DETECT_MAGIC_REG_ADDR) return value;
+        const alias = CHIP_MAGIC_ALIASES.get(value >>> 0);
+        if (alias === undefined) return value;
+        if (!quiet) {
+          log(`Chip magic 0x${(value >>> 0).toString(16)} aliased to 0x${alias.toString(16)} (newer ESP32-C5 revision).`);
+        }
+        return alias;
+      };
+    };
+
+    const runChipMagicSelfTest = async () => {
+      const failures = [];
+      const check = async (name, value, addr, expected) => {
+        const loader = {
+          CHIP_DETECT_MAGIC_REG_ADDR,
+          async readReg(readAddr) {
+            if (readAddr !== addr) throw new Error(`${name}: unexpected address 0x${readAddr.toString(16)}`);
+            return value;
+          },
+        };
+        patchChipMagic(loader, { quiet: true });
+        const actual = await loader.readReg(addr);
+        if ((actual >>> 0) !== (expected >>> 0)) {
+          failures.push(`${name}: got 0x${(actual >>> 0).toString(16)} expected 0x${(expected >>> 0).toString(16)}`);
+        }
+      };
+      await check("rev 1.2 alias", 0x30e1706f, CHIP_DETECT_MAGIC_REG_ADDR, 0x1101406f);
+      await check("original magic", 0x1101406f, CHIP_DETECT_MAGIC_REG_ADDR, 0x1101406f);
+      await check("older magic 0x5fd1406f", 0x5fd1406f, CHIP_DETECT_MAGIC_REG_ADDR, 0x5fd1406f);
+      await check("older magic 0x63e1406f", 0x63e1406f, CHIP_DETECT_MAGIC_REG_ADDR, 0x63e1406f);
+      await check("other register", 0x30e1706f, 0x60000014, 0x30e1706f);
+      if (failures.length) throw new Error(failures.join("; "));
+    };
+
     async function sendDownloadCommand(port) {
       log(`Opening serial at ${APP_BAUD} to request download mode…`);
       await port.open({ baudRate: APP_BAUD });
@@ -464,6 +510,7 @@
           terminal,
           debugLogging: false,
         });
+        patchChipMagic(esploader);
         log("Connecting / syncing…");
         const chip = await esploader.main("default_reset");
         setConnected(true, chip);
@@ -549,6 +596,12 @@
       }
     });
 
+    try {
+      await runChipMagicSelfTest();
+      log("Chip magic self-test: ok");
+    } catch (e) {
+      log(`Chip magic self-test: ${e.message || e}`);
+    }
     log("JanosRF flasher ready. Connect your device and press Connect.");
   </script>
 </body>
